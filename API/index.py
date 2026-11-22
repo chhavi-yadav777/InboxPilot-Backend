@@ -37,6 +37,10 @@ from DB.dbClient import (
 logger = logging.getLogger("inboxpilot.api")
 OAUTH_STATE_COOKIE = "inboxpilot_oauth_state"
 OAUTH_VERIFIER_COOKIE = "inboxpilot_oauth_code_verifier"
+
+COOKIE_SECURE = settings.google_redirect_uri.startswith("https://")
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
+
 OAUTH_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -63,7 +67,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=[
+        settings.frontend_url.rstrip("/"),
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -146,8 +154,8 @@ def google_login(response: Response) -> OAuthStartResponse:
         OAUTH_STATE_COOKIE,
         state,
         httponly=True,
-        secure=settings.google_redirect_uri.startswith("https://"),
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=600,
         path="/",
     )
@@ -157,8 +165,8 @@ def google_login(response: Response) -> OAuthStartResponse:
         OAUTH_VERIFIER_COOKIE,
         flow.code_verifier,
         httponly=True,
-        secure=settings.google_redirect_uri.startswith("https://"),
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=600,
         path="/",
     )
@@ -280,13 +288,25 @@ def google_callback(
         AUTH_COOKIE_NAME,
         create_access_token(google_sub),
         httponly=True,
-        secure=settings.google_redirect_uri.startswith("https://"),
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
     )
-    redirect.delete_cookie(OAUTH_STATE_COOKIE, httponly=True, samesite="lax", path="/")
-    redirect.delete_cookie(OAUTH_VERIFIER_COOKIE, httponly=True, samesite="lax", path="/")
+    redirect.delete_cookie(
+    OAUTH_STATE_COOKIE,
+    httponly=True,
+    secure=COOKIE_SECURE,
+    samesite=COOKIE_SAMESITE,
+    path="/",
+)
+    redirect.delete_cookie(
+    OAUTH_VERIFIER_COOKIE,
+    httponly=True,
+    secure=COOKIE_SECURE,
+    samesite=COOKIE_SAMESITE,
+    path="/",
+)
     return redirect
 
 
@@ -295,8 +315,8 @@ def logout(response: Response) -> Response:
     response.delete_cookie(
         AUTH_COOKIE_NAME,
         httponly=True,
-        secure=settings.google_redirect_uri.startswith("https://"),
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         path="/",
     )
     response.status_code = 204
